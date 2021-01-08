@@ -1,6 +1,18 @@
 <?php
 require __DIR__ . '/vendor/autoload.php';
 
+use phpseclib3\Net\SSH2;
+use phpseclib3\Crypt\PublicKeyLoader;
+use Symfony\Component\Dotenv\Dotenv;
+
+$dotenv = new Dotenv();
+$dotenv->loadEnv(__DIR__.'/.env');
+
+$hostname = $_ENV['HOSTNAME'];
+$keyFile = $_ENV['KEY_FILE'];
+$keyPassword = $_ENV['KEY_PASSWORD'];
+$username = $_ENV['USERNAME'];
+
 function human_readable_bytes($number, $size='b') {
     if ($size == "kb") {
         $number = $number * 1024;
@@ -24,19 +36,13 @@ function percentage($value, $total = 0) {
     return ($value * 100 / $total);
 }
 
-use phpseclib\Net\SSH2;
-use phpseclib\Crypt\RSA;
+$ssh = new SSH2($hostname);
+$key = PublicKeyLoader::load(file_get_contents($keyFile), $keyPassword);
 
-//$ssh = new SSH2('');
-$ssh = new SSH2('');
-$key = new RSA();
-$key->setPassword('');
-//$key->loadKey(file_get_contents('D:\documenten\Jan Bouma\keys\40ND5Z1.ppk'));
-$key->loadKey(file_get_contents(''));
-//if (!$ssh->login('', $key)) {
-if (!$ssh->login('', $key)) {
+if (!$ssh->login($username, $key)) {
     exit('Login Failed');
 }
+
 /* OOM Killer */
 $dmesgOomKiller = $ssh->exec('dmesg -T | grep -i "Killed process\|Out of memory\|oom-killer"');
 $dmesgOomKillerParts = explode("\n", $dmesgOomKiller);
@@ -95,7 +101,6 @@ foreach ($statusArray as $status) {
             $proc->vmSwap = $vmSwap;
             $swapProcs[] = $proc;
         }
-
     }
 }
 $swapTotal = 0;
@@ -120,6 +125,30 @@ arsort($swapProcsCum);
 //echo "Total: " . $swapTotal . PHP_EOL;
 
 $psMem = $ssh->exec("sudo sh -c 'ps -o pid:9,user:20,rss:10,%mem:6,command ax'");
+$psMemParts = explode("\n", $psMem);
+foreach ($psMemParts as $psMemPart) {
+    //print ($psMemPart);
+    $pid = trim(substr($psMemPart, 0,9));
+    $user = trim(substr($psMemPart, 10, 20));
+    $rss = trim(substr($psMemPart, 31, 10));
+    $pmem = trim(substr($psMemPart, 42,6));
+    $command = trim(substr($psMemPart, 49));
+    print ("[".$psMemPart."]\n");
+    print ("Pid: [".$pid."]\n");
+    print ("User: [".$user."]\n");
+    print ("Rss: [".$rss."]\n");
+    print ("Pmem: [".$pmem."]\n");
+    print ("Command: [".$command."]\n");
+    print ("-----\n");
+}
+
+class Processes {
+    public $pid;
+    public $user;
+    public $rss;
+    public $pmem;
+    public $command;
+}
 ?>
     <!doctype html>
     <html lang="en">
